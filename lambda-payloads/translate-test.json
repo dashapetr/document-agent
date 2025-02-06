@@ -1,0 +1,27 @@
+{
+  "agent": {
+    "alias": "LKIURTEDID",
+    "name": "Agent-AWS",
+    "version": "DRAFT",
+    "id": "RTJIKOYUZZ"
+  },
+  "sessionId": "786745324323626",
+  "sessionAttributes": {},
+  "inputText": "translate document",
+  "promptSessionAttributes": {},
+  "function": "translate_document",
+  "messageVersion": "1.0",
+  "actionGroup": "agent_action_group",
+  "parameters": [
+    {
+      "name": "document_name",
+      "type": "string",
+      "value": "contrato-servicios"
+    },
+    {
+      "name": "table_name",
+      "type": "string",
+      "value": "foreign-docs"
+    }
+  ]
+}

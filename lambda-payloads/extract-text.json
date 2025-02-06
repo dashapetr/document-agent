@@ -1,0 +1,27 @@
+{
+  "agent": {
+    "alias": "LKIURTEDID",
+    "name": "Agent-AWS",
+    "version": "DRAFT",
+    "id": "RTJIKOYUZZ"
+  },
+  "sessionId": "786745324323626",
+  "sessionAttributes": {},
+  "inputText": "extract text from pdf",
+  "promptSessionAttributes": {},
+  "function": "extract_text_from_pdf",
+  "messageVersion": "1.0",
+  "actionGroup": "agent_action_group",
+  "parameters": [
+    {
+      "name": "s3_path",
+      "type": "string",
+      "value": "s3://bucket-for-documents-NUMBER/invoice.pdf"
+    },
+    {
+      "name": "table_name",
+      "type": "string",
+      "value": "invoices-parsed"
+    }
+  ]
+}
