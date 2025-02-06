@@ -1,15 +1,19 @@
 import boto3
 import os
+import time
 from collections import defaultdict
-from io import BytesIO
+from typing import Dict, Any, List
 
-dynamodb = boto3.resource('dynamodb')
-s3 = boto3.client('s3')
-textract = boto3.client('textract')
-translate = boto3.client('translate')
+# Initialize AWS Clients
+dynamodb = boto3.resource("dynamodb")
+s3 = boto3.client("s3")
+textract = boto3.client("textract")
+translate = boto3.client("translate")
 
 
-def get_kv_relationship(key_map, value_map, block_map):
+def get_kv_relationship(key_map: Dict[str, Any], value_map: Dict[str, Any], block_map: Dict[str, Any]) -> Dict[
+    str, List[str]]:
+    """Extracts key-value relationships from Textract response blocks."""
     kvs = defaultdict(list)
     for block_id, key_block in key_map.items():
         value_block = find_value_block(key_block, value_map)
@@ -19,129 +23,101 @@ def get_kv_relationship(key_map, value_map, block_map):
     return kvs
 
 
-def find_value_block(key_block, value_map):
-    for relationship in key_block['Relationships']:
-        if relationship['Type'] == 'VALUE':
-            for value_id in relationship['Ids']:
-                value_block = value_map[value_id]
-    return value_block
+def find_value_block(key_block: Dict[str, Any], value_map: Dict[str, Any]) -> Dict[str, Any]:
+    """Finds the corresponding value block for a given key block."""
+    for relationship in key_block.get("Relationships", []):
+        if relationship["Type"] == "VALUE":
+            for value_id in relationship["Ids"]:
+                return value_map[value_id]
+    return {}
 
 
-def get_text(result, blocks_map):
-    text = ''
-    if 'Relationships' in result:
-        for relationship in result['Relationships']:
-            if relationship['Type'] == 'CHILD':
-                for child_id in relationship['Ids']:
-                    word = blocks_map[child_id]
-                    if word['BlockType'] == 'WORD':
-                        text += word['Text'] + ' '
-                    if word['BlockType'] == 'SELECTION_ELEMENT':
-                        if word['SelectionStatus'] == 'SELECTED':
-                            text += 'X '
-
-    return text
+def get_text(result: Dict[str, Any], blocks_map: Dict[str, Any]) -> str:
+    """Extracts text from a Textract block."""
+    text = ""
+    for relationship in result.get("Relationships", []):
+        if relationship["Type"] == "CHILD":
+            for child_id in relationship["Ids"]:
+                word = blocks_map[child_id]
+                if word["BlockType"] == "WORD":
+                    text += word["Text"] + " "
+                elif word["BlockType"] == "SELECTION_ELEMENT" and word.get("SelectionStatus") == "SELECTED":
+                    text += "X "
+    return text.strip()
 
 
-def extract_text_from_pdf(s3_path, table_name):
-    """Retrieve PDF from S3, parse it as a table using Amazon Textract, and save structured data to DynamoDB."""
-    bucket, key = s3_path.replace("s3://", "").split('/', 1)
-    local_file = f"/tmp/{key.split('/')[-1]}"
-
-    # Extract document name from S3 path (removing extensions)
+def extract_text_from_pdf(s3_path: str, table_name: str) -> Dict[str, str]:
+    """Retrieves a PDF from S3, extracts text using Amazon Textract, and saves structured data to DynamoDB."""
+    bucket, key = s3_path.replace("s3://", "").split("/", 1)
     document_name = os.path.splitext(os.path.basename(key))[0]
 
     # Download the file from S3
+    local_file = f"/tmp/{document_name}.pdf"
     s3.download_file(bucket, key, local_file)
 
-    # Open file and send to Textract for text extraction
-    with open(local_file, 'rb') as document:
-        response = textract.analyze_document(
-            Document={'Bytes': document.read()},
-            FeatureTypes=['FORMS']
-        )
+    # Process with Textract
+    with open(local_file, "rb") as document:
+        response = textract.analyze_document(Document={"Bytes": document.read()}, FeatureTypes=["FORMS"])
 
-    blocks = response['Blocks']
-
-    key_map = {}
-    value_map = {}
-    block_map = {}
-    for block in blocks:
-        block_id = block['Id']
+    # Organize blocks
+    key_map, value_map, block_map = {}, {}, {}
+    for block in response.get("Blocks", []):
+        block_id = block["Id"]
         block_map[block_id] = block
-        if block['BlockType'] == "KEY_VALUE_SET":
-            if 'KEY' in block['EntityTypes']:
-                key_map[block_id] = block
-            else:
-                value_map[block_id] = block
+        if block["BlockType"] == "KEY_VALUE_SET":
+            (key_map if "KEY" in block.get("EntityTypes", []) else value_map)[block_id] = block
 
     kvs = get_kv_relationship(key_map, value_map, block_map)
-
-    print(kvs)
-
-    # Remove temporary file
     os.remove(local_file)
 
-    # Save structured table data to DynamoDB
+    # Save extracted data to DynamoDB
     table = dynamodb.Table(table_name)
-    table.put_item(
-        Item={
-            "doc-name": document_name,  # Using extracted document name as partition key
-            "document_path": s3_path,
-            "tables": kvs  # Save table as a nested attribute
-        }
-    )
+    table.put_item(Item={"doc-name": document_name, "document_path": s3_path, "tables": kvs})
 
     return {"status": "success", "message": f"Table extracted and saved for {document_name}."}
 
 
-def translate_document(document_name, table_name):
-    """Retrieve a PDF document by name, check its language, translate if needed, save and update DB."""
+def translate_document(document_name: str, table_name: str) -> Dict[str, str]:
+    """Retrieves a document from DynamoDB, extracts and translates its text if necessary, and stores the translated version in S3."""
     table = dynamodb.Table(table_name)
     response = table.get_item(Key={"doc-name": document_name})
 
-    if 'Item' not in response:
+    if "Item" not in response:
         return {"error": "Document not found."}
 
-    item = response['Item']
+    item = response["Item"]
     language = item.get("language", "en")
     s3_path = item["document_path"]
 
-    if language != 'en':
-        # Extract bucket and key from S3 path
-        bucket, key = s3_path.replace("s3://", "").split('/', 1)
+    if language != "en":
+        bucket, key = s3_path.replace("s3://", "").split("/", 1)
 
-        # Download PDF file from S3
-        pdf_stream = s3.get_object(Bucket=bucket, Key=key)['Body'].read()
+        # Start Textract job
+        job_response = textract.start_document_text_detection(
+            DocumentLocation={"S3Object": {"Bucket": bucket, "Name": key}})
+        job_id = job_response["JobId"]
 
-        # Use Textract to extract text from the PDF
-        response = textract.start_document_text_detection(
-            DocumentLocation={'S3Object': {'Bucket': bucket, 'Name': key}})
+        # Wait for job to complete
+        while True:
+            job_status = textract.get_document_text_detection(JobId=job_id)
+            if job_status["JobStatus"] == "SUCCEEDED":
+                break
+            time.sleep(5)
 
-        # Wait for Textract to process the document (this can take some time)
-        job_id = response['JobId']
-        result = textract.get_document_text_detection(JobId=job_id)
-
-        # Gather text from the response
-        text = ""
-        for item in result['Blocks']:
-            if item['BlockType'] == 'LINE':
-                text += item['Text'] + "\n"
+        # Extract text
+        extracted_text = "\n".join(
+            [block["Text"] for block in job_status.get("Blocks", []) if block["BlockType"] == "LINE"])
 
         # Translate text
-        translated_text = translate.translate_text(Text=text, SourceLanguageCode=language, TargetLanguageCode='en')[
+        translated_text = \
+        translate.translate_text(Text=extracted_text, SourceLanguageCode=language, TargetLanguageCode="en")[
             "TranslatedText"]
 
-        # Write translated text to a .txt file
-        translated_txt_stream = BytesIO()
-        translated_txt_stream.write(translated_text.encode('utf-8'))
-        translated_txt_stream.seek(0)
-
-        # Upload translated .txt file to S3
+        # Save translation as a .txt file
         translated_key = f"translated/{key.replace('.pdf', '_translated.txt')}"
-        s3.put_object(Bucket=bucket, Key=translated_key, Body=translated_txt_stream.getvalue())
+        s3.put_object(Bucket=bucket, Key=translated_key, Body=translated_text.encode("utf-8"))
 
-        # Update DynamoDB with translated document path
+        # Update DynamoDB
         table.update_item(
             Key={"doc-name": document_name},
             UpdateExpression="SET translated_document_path = :tp",
@@ -151,20 +127,25 @@ def translate_document(document_name, table_name):
     return {"status": "success", "message": "Document translated and updated."}
 
 
-def lambda_handler(event, context):
-    print(event)
-    function = event['function']
-    parameters = event.get('parameters', [])
+def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    """AWS Lambda handler that routes events to the appropriate function."""
+    function = event.get("function")
+    parameters = {param["name"]: param["value"] for param in event.get("parameters", [])}
 
-    if function == 'extract_text_from_pdf':
-        s3_path = next(item["value"] for item in parameters if item["name"] == "s3_path")
-        table_name = next(item["value"] for item in parameters if item["name"] == "table_name")
-        body = extract_text_from_pdf(s3_path, table_name)
-    elif function == 'translate_document':
-        document_name = next(item["value"] for item in parameters if item["name"] == "document_name")
-        table_name = next(item["value"] for item in parameters if item["name"] == "table_name")
-        body = translate_document(document_name, table_name)
+    if function == "extract_text_from_pdf":
+        body = extract_text_from_pdf(parameters["s3_path"], parameters["table_name"])
+    elif function == "translate_document":
+        body = translate_document(parameters["document_name"], parameters["table_name"])
     else:
         body = {"error": f"{function} is not a valid function."}
 
-    return {"response": body}
+    return {
+        "messageVersion": "1.0",
+        "response": {
+            "actionGroup": event["actionGroup"],
+            "function": function,
+            "functionResponse": {"responseBody": {"TEXT": {"body": str(body)}}}
+        },
+        "sessionAttributes": event.get("sessionAttributes", {}),
+        "promptSessionAttributes": event.get("promptSessionAttributes", {})
+    }
