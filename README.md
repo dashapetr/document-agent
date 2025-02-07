@@ -151,7 +151,7 @@ This will be a test event for the `extract_text_from_pdf` API that matches how t
 5. Click on `Create new event` button and repeat steps 2-4 to add one more test event (you can find JSON payload in the `lambda-payloads/translate-test.json`) 
 
 
-#### Create action group
+#### CREATE ACTION GROUP
 
 An **action group** is a toolbox that defines actions the agent can help the user perform.
 
