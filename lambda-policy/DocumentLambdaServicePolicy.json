@@ -1,0 +1,51 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "VisualEditor0",
+            "Effect": "Allow",
+            "Action": [
+                "textract:ListTagsForResource",
+                "s3:PutObject",
+                "s3:GetObject",
+                "dynamodb:PutItem",
+                "textract:GetAdapter",
+                "dynamodb:GetItem",
+                "dynamodb:UpdateItem"
+            ],
+            "Resource": [
+                "arn:aws:textract:*:666334480429:/adapters/*",
+                "arn:aws:s3:::*/*",
+                "arn:aws:dynamodb:*:666334480429:table/*"
+            ]
+        },
+        {
+            "Sid": "VisualEditor1",
+            "Effect": "Allow",
+            "Action": [
+                "textract:GetAdapterVersion",
+                "textract:ListTagsForResource"
+            ],
+            "Resource": "arn:aws:textract:*:666334480429:/adapters/*/versions/*"
+        },
+        {
+            "Sid": "VisualEditor2",
+            "Effect": "Allow",
+            "Action": [
+                "textract:AnalyzeExpense",
+                "textract:DetectDocumentText",
+                "textract:GetExpenseAnalysis",
+                "textract:ListAdapterVersions",
+                "textract:AnalyzeDocument",
+                "textract:GetLendingAnalysis",
+                "textract:GetDocumentTextDetection",
+                "textract:GetDocumentAnalysis",
+                "textract:AnalyzeID",
+                "textract:GetLendingAnalysisSummary",
+                "textract:ListAdapters",
+                "textract:StartDocumentTextDetection"
+            ],
+            "Resource": "*"
+        }
+    ]
+}
