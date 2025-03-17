@@ -48,7 +48,9 @@ Agents extend FMs to understand user requests, break down complex tasks into mul
 ![Create agent](/images/create-agent.png)
 
 3. You can now open the `Agent builder`, the place where you can access and edit the overall configuration of an agent. 
-We will select `Amazon Nova Lite v1` as model ([Pricing](https://aws.amazon.com/bedrock/pricing/)) [**Note**: If you face any issues with the model, try change it to Claude family models]; Paste the following text as Instructions for the Agent:
+We will select `Amazon Nova Lite v1` as model ([Pricing](https://aws.amazon.com/bedrock/pricing/)) [**Note**: If you face any issues with the model, try change it to Claude family models];
+
+Paste the following text as Instructions for the Agent:
 ```markdown
 You are a document processing agent skilled at extracting key information from documents, translating content, summarizing text, and manipulating data formats. 
 Your tasks include finding key points in documents, locating documents in Amazon S3 and querying them, altering date formats in Excel files, summarizing long documents, 
@@ -127,7 +129,7 @@ Code contains set of APIs that Bedrock agent will call. The function will then f
 
 1. Choose `General configuration` from the left side panel 
 2. Click on the `Edit` button
-3. Modify `Timeout` by increasing it to 1 minute 30 seconds to make sure your Lambda won't fail while waiting for document parsing.
+3. Modify `Timeout` by increasing it to 3 minutes 30 seconds to make sure your Lambda won't fail while waiting for document parsing.
 4. Click on the `Save` button
 
 **Add code:**
